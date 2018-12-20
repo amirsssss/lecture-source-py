@@ -8,7 +8,7 @@ def solve_model(og,
     T, _ = operator_factory(og, parallel_flag=use_parallel)
 
     # Set up loop
-    v = np.log(og.y_grid)  # Initial condition
+    v = np.log(og.grid)  # Initial condition
     i = 0
     error = tol + 1
 
