@@ -151,7 +151,7 @@ Implementation
 Let's implement this version of the Coleman-Reffett operator and see how it performs
 
 First we will construct a class ``OptimalGrowthModel`` to hold the parameters of the
-model -- unlike the previous lecture, we also need the inverse marginal utility function in this lecture
+model
 
 
 .. code-block:: python3
@@ -190,12 +190,17 @@ The Operator
 
 Here's an implementation of :math:`K` using EGM as described above
 
+Unlike the :doc:`previous lecture <coleman_policy_iter>`, we do not just-in-time
+compile the operator because we want to return the policy function
+
+Despite this, the EGM method is still faster than the standard Coleman-Reffett operator,
+as we will see in the exercises
+
 .. code-block:: python3
 
     def egm_operator_factory(og):
         """
-        A function factory for building the Coleman-Reffett operator using 
-        the endogenous grid method
+        A function factory for building the Coleman-Reffett operator
 
         Here og is an instance of OptimalGrowthModel.
         """
@@ -204,25 +209,27 @@ Here's an implementation of :math:`K` using EGM as described above
         f_prime, u_prime, u_prime_inv = og.f_prime, og.u_prime, og.u_prime_inv
         grid, shocks = og.grid, og.shocks
 
-        @njit
         def K(σ):
             """
             The Bellman operator
+            
+            * σ is a function
             """
             # Allocate memory for value of consumption on endogenous grid points
-            c = np.empty_like(grid)
-            σ_func = lambda x: interp(grid, σ, x)
+            c = np.empty_like(grid)  
 
             # Solve for updated consumption value
-            for i in range(len(grid)):
-                k = grid[i]
-                vals = u_prime(σ_func(f(k) * shocks)) * f_prime(k) * shocks
+            for i, k in enumerate(grid):
+                vals = u_prime(σ(f(k) * shocks)) * f_prime(k) * shocks
                 c[i] = u_prime_inv(β * np.mean(vals))
 
             # Determine endogenous grid
             y = grid + c  # y_i = k_i + c_i
+
+            # Update policy function and return
+            σ_new = lambda x: interp(y, c, x)
             
-            return interp(y, c, grid)
+            return σ_new
 
         return K
 
@@ -289,7 +296,6 @@ As a preliminary test, let's see if :math:`K \sigma^* = \sigma^*`, as implied by
 
     β, grid = og.β, og.grid
     
-    @njit
     def c_star(y):
         "True optimal policy"
         return (1 - α * β) * y
@@ -299,7 +305,7 @@ As a preliminary test, let's see if :math:`K \sigma^* = \sigma^*`, as implied by
     fig, ax = plt.subplots(figsize=(9, 6))
 
     ax.plot(grid, c_star(grid), label="optimal policy $\sigma^*$")
-    ax.plot(grid, K(c_star(grid)), label="$K\sigma^*$")
+    ax.plot(grid, K(c_star)(grid), label="$K\sigma^*$")
 
     ax.legend()
     plt.show()
@@ -311,7 +317,7 @@ In fact it's easy to see that the difference is essentially zero:
 
 .. code-block:: python3 
 
-    max(abs(K(c_star(grid)) - c_star(grid)))
+    max(abs(K(c_star)(grid) - c_star(grid)))
 
 
 Next let's try iterating from an arbitrary initial condition and see if we
@@ -324,17 +330,16 @@ Let's start from the consumption policy that eats the whole pie: :math:`\sigma(y
 
 .. code-block:: python3 
 
-    σ = og.grid
+    σ = lambda x: x
     n = 15
     fig, ax = plt.subplots(figsize=(9, 6))
 
-    ax.plot(grid, σ, color=plt.cm.jet(0), 
+    ax.plot(grid, σ(grid), color=plt.cm.jet(0), 
             alpha=0.6, label='initial condition $\sigma(y) = y$')
 
     for i in range(n):
-        σ_new = K(σ)
-        σ = σ_new
-        ax.plot(grid, K(σ), color=plt.cm.jet(i / n),  alpha=0.6)
+        σ = K(σ)  # Update policy
+        ax.plot(grid, σ(grid), color=plt.cm.jet(i / n),  alpha=0.6)
 
     ax.plot(grid, c_star(grid), 'k-', 
             alpha=0.8, label='true policy function $\sigma^*$')
@@ -377,8 +382,9 @@ We'll do so using the CRRA model adopted in the exercises of the :doc:`Euler equ
                             u_prime=u_prime,
                             u_prime_inv=u_prime_inv)
                         
-    K = time_operator_factory(og)     # Standard Coleman-Reffett operator
-    K_egm = egm_operator_factory(og)  # Coleman-Reffett operator with endogenous grid
+    K_time = time_operator_factory(og)     # Standard Coleman-Reffett operator
+    K_time(grid)                           # Call once to compile jitted version
+    K_egm = egm_operator_factory(og)       # Coleman-Reffett operator with endogenous grid
 
 
 Here's the result
@@ -387,18 +393,17 @@ Here's the result
 .. code-block:: python3 
 
     sim_length = 20
-    σ_init = grid  # Intiial policy
 
     print("Timing standard Coleman policy function iteration")
-    σ = σ_init  
+    σ = grid    # Initial policy
     qe.util.tic()
     for i in range(sim_length):
-        σ_new = K(σ)
+        σ_new = K_time(σ)
         σ = σ_new
     qe.util.toc()
 
     print("Timing policy function iteration with endogenous grid")
-    σ = σ_init  
+    σ = lambda x: x  # Initial policy  
     qe.util.tic()
     for i in range(sim_length):
         σ_new = K_egm(σ)
@@ -406,7 +411,7 @@ Here's the result
     qe.util.toc()
 
 
-We see that the EGM version is more than twice as fast
+We see that the EGM version is around twice as fast, even without jit compilation
 
 At the same time, the absence of numerical root finding means that it is
 typically more accurate at each step as well
