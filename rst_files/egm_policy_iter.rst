@@ -194,7 +194,7 @@ Unlike the :doc:`previous lecture <coleman_policy_iter>`, we do not just-in-time
 compile the operator because we want to return the policy function
 
 Despite this, the EGM method is still faster than the standard Coleman-Reffett operator,
-as we will see in the exercises
+as we will see later on
 
 .. code-block:: python3
 
