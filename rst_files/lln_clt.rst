@@ -625,7 +625,7 @@ In the figure, the closest density is that of :math:`Y_1`, while the furthest is
         bdraws[1, :] += 0.6
         bdraws[2, :] -= 1.1
         # == Set X[i] = bdraws[j, i], where j is a random draw from {0, 1, 2} == #
-        js = np.random.randint(0, 2, size=k)
+        js = np.random.randint(0, 3, size=k)
         X = bdraws[js, np.arange(k)]
         # == Rescale, so that the random variable is zero mean == #
         m, sigma = X.mean(), X.std()
